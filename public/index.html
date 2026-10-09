@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mapa AnyDesk</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body x-data="app()" x-init="iniciar()" x-cloak>
+
+<!-- Login / primeira configuração -->
+<template x-if="pronto && !autenticado">
+  <div class="login">
+    <h1>Mapa AnyDesk</h1>
+    <p x-text="configurado ? 'Entre para consultar as máquinas.' : 'Primeiro acesso: defina o usuário e a senha que você e a outra pessoa vão usar.'"></p>
+    <div class="campo"><label>Usuário</label><input x-model="lg.usuario" autofocus @keydown.enter="entrar()"></div>
+    <div class="campo"><label>Senha</label><input type="password" x-model="lg.senha" @keydown.enter="entrar()"></div>
+    <button class="pri" @click="entrar()" x-text="configurado ? 'Entrar' : 'Criar acesso'"></button>
+    <p class="erro" x-show="erroLogin" x-text="erroLogin"></p>
+  </div>
+</template>
+
+<!-- Painel -->
+<template x-if="autenticado">
+<div class="app">
+  <aside>
+    <h1>Mapa AnyDesk</h1>
+    <button class="item" :class="{on:!setorSel}" @click="setorSel=null">Todos os setores <span x-text="maquinas.length"></span></button>
+    <div class="sep"></div>
+    <template x-for="s in setores" :key="s.id">
+      <button class="item" :class="{on:setorSel===s.id}" @click="setorSel=s.id" @dblclick="editarSetor(s)" title="Clique duplo para renomear">
+        <span style="font-size:14px" x-text="s.nome"></span><span x-text="s.total"></span>
+      </button>
+    </template>
+    <button class="item" @click="editarSetor(null)">+ Novo setor</button>
+    <div class="rod">
+      <button class="item" @click="abrirBackup()">Backup</button>
+      <button class="item" @click="sair()">Sair</button>
+    </div>
+  </aside>
+
+  <main>
+    <div class="abas">
+      <button :class="{on:aba==='maquinas'}" @click="aba='maquinas'">Máquinas</button>
+      <button :class="{on:aba==='impressoras'}" @click="aba='impressoras'">Impressoras</button>
+      <button :class="{on:aba==='mapa'}" @click="aba='mapa'">Mapa</button>
+    </div>
+    <div class="topo" x-show="aba!=='mapa'">
+      <input type="search" placeholder="Buscar por nome, referência, ID, IP, observação…" x-model="busca">
+      <span class="esp"></span>
+      <button class="pri" x-show="aba==='maquinas'" @click="editarMaquina(null)" :disabled="!setores.length">Nova máquina</button>
+      <button class="pri" x-show="aba==='impressoras'" @click="editarImpressora(null)" :disabled="!setores.length">Nova impressora</button>
+    </div>
+
+    <div class="vazio" x-show="!setores.length">Comece criando um setor, como UTI ou Recepção, no menu à esquerda.</div>
+    <div class="vazio" x-show="aba==='maquinas' && setores.length && !grupos.length">Nenhuma máquina encontrada.</div>
+
+    <template x-for="sg in (aba==='maquinas' ? grupos : [])" :key="sg.setor">
+      <section>
+        <h2 class="setor-t" x-text="sg.setor"></h2>
+        <div class="posto">
+            <template x-for="m in sg.itens" :key="m.id">
+              <div class="lin">
+                <div class="nome" x-text="m.nome"></div>
+                <div>
+                  <div x-text="m.referencia || '—'" :class="{mu:!m.referencia}"></div>
+                  <div class="mu peq" x-show="m.obs" x-text="m.obs"></div>
+                  <div class="mu peq" x-show="m.impressora_nome" x-text="'Impressora: '+m.impressora_nome"></div>
+                </div>
+                <div class="id">
+                  <span x-text="fmt(m.anydesk_id) || '—'" :class="{mu:!m.anydesk_id}"></span>
+                  <template x-if="m.anydesk_id">
+                    <span><button @click="copiar(m.anydesk_id)">Copiar</button><a :href="'anydesk:'+m.anydesk_id" title="Abrir no AnyDesk">Abrir</a></span>
+                  </template>
+                </div>
+                <div class="mu peq" x-text="m.hostname || '—'"></div>
+                <div class="mu peq" x-text="m.ip || '—'"></div>
+                <div style="text-align:right">
+                  <button class="lnk" @click="editarMaquina(m)">Editar</button>
+                  <button class="lnk del" @click="excluirMaquina(m)">Excluir</button>
+                </div>
+              </div>
+            </template>
+        </div>
+      </section>
+    </template>
+
+    <template x-for="sg in (aba==='impressoras' ? gruposImp : [])" :key="sg.setor">
+      <section>
+        <h2 class="setor-t" x-text="sg.setor"></h2>
+        <div class="posto">
+          <template x-for="i in sg.itens" :key="i.id">
+            <div class="lin imp">
+              <div class="nome" x-text="i.nome"></div>
+              <div>
+                <div x-text="i.referencia || '—'" :class="{mu:!i.referencia}"></div>
+                <div class="mu peq" x-show="i.obs" x-text="i.obs"></div>
+              </div>
+              <div class="mu peq" x-text="i.modelo || '—'"></div>
+              <div class="mu peq" x-text="i.ip || '—'"></div>
+              <div class="mu peq" x-text="pcsDa(i.id).map(m=>m.nome+' ('+m.setor_nome+')').join(', ') || 'Nenhum PC ligado'"></div>
+              <div style="text-align:right">
+                <button class="lnk" @click="editarImpressora(i)">Editar</button>
+                <button class="lnk del" @click="excluirImpressora(i)">Excluir</button>
+              </div>
+            </div>
+          </template>
+        </div>
+      </section>
+    </template>
+    <div class="vazio" x-show="aba==='impressoras' && setores.length && !gruposImp.length">Nenhuma impressora encontrada. Cadastre aqui e depois escolha a impressora no formulário do PC.</div>
+
+    <template x-if="aba==='mapa'">
+      <div class="mapa">
+        <div class="mapa-area">
+          <svg x-ref="svg" class="grafo"></svg>
+          <div class="legenda"><span><i class="s"></i>Setor</span><span><i class="p"></i>PC</span><span><i class="q"></i>Impressora</span></div>
+          <button class="reset" @click="resetMapa()">Centralizar</button>
+          <div class="vazio vazio-mapa" x-show="!maquinas.length">Cadastre máquinas para ver o mapa.</div>
+        </div>
+        <div class="painel">
+          <p class="mu" x-show="!det">Clique em um item do mapa para ver os detalhes.</p>
+          <template x-if="det">
+            <div>
+              <h2 x-text="det.titulo"></h2>
+              <p class="mu" style="margin:2px 0 14px" x-text="det.subtitulo"></p>
+              <template x-if="det.anydesk">
+                <div class="cp"><div class="k">ID do AnyDesk</div>
+                  <div class="id"><span x-text="fmt(det.anydesk)"></span><button @click="copiar(det.anydesk)">Copiar</button><a :href="'anydesk:'+det.anydesk">Abrir</a></div>
+                </div>
+              </template>
+              <template x-for="c in det.campos" :key="c.k"><div class="cp"><div class="k" x-text="c.k"></div><div class="val" x-text="c.v"></div></div></template>
+              <div class="cp" x-show="det.ligacoes.length"><div class="k" x-text="det.ligTitulo"></div>
+                <template x-for="l in det.ligacoes" :key="l.id"><button class="item" @click="irPara(l.id)" x-text="l.texto"></button></template>
+              </div>
+              <button style="margin-top:6px" @click="det.editar()">Editar</button>
+            </div>
+          </template>
+        </div>
+      </div>
+    </template>
+  </main>
+
+  <!-- Modal: máquina -->
+  <div class="fundo" x-show="mq" @keydown.escape.window="mq=null" @click.self="mq=null">
+    <div class="modal">
+      <h2 x-text="mq?.id ? 'Editar máquina' : 'Nova máquina'"></h2>
+      <template x-if="mq">
+      <div class="grade">
+        <div><label>Setor</label><select x-model.number="mq.setor_id"><template x-for="s in setores" :key="s.id"><option :value="s.id" x-text="s.nome"></option></template></select></div>
+        <div><label>Nome do PC</label><input x-model="mq.nome" placeholder="Ex.: PC1"></div>
+        <div><label>ID do AnyDesk</label><input x-model="mq.anydesk_id" inputmode="numeric" placeholder="123 456 789"></div>
+        <div><label>IP</label><input x-model="mq.ip" placeholder="192.168.0.10"></div>
+        <div><label>Nome da máquina (hostname)</label><input x-model="mq.hostname"></div>
+        <div><label>Referência</label><input x-model="mq.referencia" placeholder="Ex.: do meio, perto do telefone"></div>
+        <div class="full"><label>Impressora</label>
+          <select x-model.number="mq.impressora_id"><option value="">Nenhuma</option><template x-for="i in impressoras" :key="i.id"><option :value="i.id" x-text="i.nome+' ('+i.setor_nome+')'"></option></template></select>
+          <div class="mu peq" style="margin-top:4px" x-show="!impressoras.length">Nenhuma impressora cadastrada. Cadastre na aba Impressoras.</div></div>
+        <div class="full"><label>Observações</label><textarea rows="3" x-model="mq.obs" placeholder="Anotações livres sobre esta máquina"></textarea></div>
+      </div>
+      </template>
+      <p class="erro" x-show="erroMq" x-text="erroMq"></p>
+      <div class="acoes"><button @click="mq=null">Cancelar</button><button class="pri" @click="salvarMaquina()">Salvar</button></div>
+    </div>
+  </div>
+
+  <!-- Modal: impressora -->
+  <div class="fundo" x-show="im" @keydown.escape.window="im=null" @click.self="im=null">
+    <div class="modal">
+      <h2 x-text="im?.id ? 'Editar impressora' : 'Nova impressora'"></h2>
+      <template x-if="im">
+      <div class="grade">
+        <div><label>Setor</label><select x-model.number="im.setor_id"><template x-for="s in setores" :key="s.id"><option :value="s.id" x-text="s.nome"></option></template></select></div>
+        <div><label>Nome</label><input x-model="im.nome" placeholder="Ex.: Impressora 1"></div>
+        <div><label>Modelo</label><input x-model="im.modelo"></div>
+        <div><label>IP</label><input x-model="im.ip" placeholder="192.168.0.50"></div>
+        <div class="full"><label>Referência</label><input x-model="im.referencia" placeholder="Ex.: em cima do balcão"></div>
+        <div class="full"><label>Observações</label><textarea rows="3" x-model="im.obs" placeholder="Anotações livres sobre esta impressora"></textarea></div>
+      </div>
+      </template>
+      <p class="erro" x-show="erroIm" x-text="erroIm"></p>
+      <div class="acoes"><button @click="im=null">Cancelar</button><button class="pri" @click="salvarImpressora()">Salvar</button></div>
+    </div>
+  </div>
+
+  <!-- Modal: setor -->
+  <div class="fundo" x-show="st" @keydown.escape.window="st=null" @click.self="st=null">
+    <div class="modal" style="max-width:380px">
+      <h2 x-text="st?.id ? 'Renomear setor' : 'Novo setor'"></h2>
+      <label>Nome do setor</label>
+      <input x-model="stNome" @keydown.enter="salvarSetor()" x-ref="stIn">
+      <p class="erro" x-show="erroSt" x-text="erroSt"></p>
+      <div class="acoes">
+        <button class="lnk del esq" x-show="st?.id" @click="excluirSetor()">Excluir setor</button>
+        <button @click="st=null">Cancelar</button><button class="pri" @click="salvarSetor()">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: backup -->
+  <div class="fundo" x-show="bk" @keydown.escape.window="bk=null" @click.self="bk=null">
+    <div class="modal" style="max-width:480px" x-show="bk">
+      <h2>Backup do banco</h2>
+      <p class="mu" style="margin-top:0">Uma cópia diária é feita automaticamente (as 30 mais recentes são mantidas). Use um caminho do servidor, como <code>D:\backups\anydesk</code>.</p>
+      <label>Pasta de backup</label>
+      <input x-model="bkDir">
+      <p class="mu peq" x-show="bk?.ultimo" x-text="bk?.ultimo ? 'Último backup: ' + new Date(bk.ultimo.em).toLocaleString('pt-BR') : ''"></p>
+      <p class="erro" x-show="erroBk" x-text="erroBk"></p>
+      <div class="acoes">
+        <button class="esq" @click="backupAgora()">Fazer backup agora</button>
+        <button @click="bk=null">Fechar</button><button class="pri" @click="salvarBackup()">Salvar pasta</button>
+      </div>
+    </div>
+  </div>
+</div>
+</template>
+
+<div class="toast" x-show="msg" x-text="msg" x-transition.opacity></div>
+
+<script src="/grafo.js"></script>
+<script src="/app.js"></script>
+<script src="/vendor/alpine.js" defer></script>
+</body>
+</html>

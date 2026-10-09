@@ -1,0 +1,11 @@
+{
+  "name": "mapa-anydesk",
+  "version": "1.0.0",
+  "private": true,
+  "engines": { "node": ">=22.13" },
+  "scripts": { "start": "node server.js" },
+  "dependencies": {
+    "alpinejs": "^3.14.1",
+    "express": "^4.21.0"
+  }
+}
