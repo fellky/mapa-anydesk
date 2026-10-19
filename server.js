@@ -4,7 +4,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3030;
 const DATA = path.join(__dirname, 'data');
 fs.mkdirSync(DATA, { recursive: true });
 
@@ -152,7 +152,7 @@ async function fazerBackup() {
   const arquivo = path.join(dir, `mapa-${new Date().toISOString().slice(0, 10)}.db`);
   fs.rmSync(arquivo, { force: true });
   db.exec(`VACUUM INTO '${arquivo.replace(/'/g, "''")}'`);
-  fs.readdirSync(dir).filter(f => /^mapa-.*\.db$/.test(f)).sort().slice(0, -30).forEach(f => fs.unlinkSync(path.join(dir, f)));
+  fs.readdirSync(dir).filter(f => /^mapa-.*\.db$/.test(f)).sort().slice(0, -15).forEach(f => fs.unlinkSync(path.join(dir, f)));
   cfg.ultimoBackup = { em: new Date().toISOString(), arquivo }; saveCfg(); return cfg.ultimoBackup;
 }
 const backupInfo = () => ({ dir: backupDir(), padrao: !cfg.backupDir, ultimo: cfg.ultimoBackup || null });
